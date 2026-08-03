@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -12,7 +13,12 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .client import IcsAuthenticationError, IcsClient, IcsConnectionError
-from .const import DEFAULT_UPDATE_INTERVAL, DOMAIN
+from .const import (
+    CONF_UPDATE_INTERVAL_DAYS,
+    DEFAULT_UPDATE_INTERVAL_DAYS,
+    DOMAIN,
+    normalize_update_interval_days,
+)
 from .parser import IcsParseError, IcsSummary
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,12 +33,15 @@ class IcsDataUpdateCoordinator(DataUpdateCoordinator[IcsSummary]):
         entry: ConfigEntry,
         client: IcsClient,
     ) -> None:
+        update_interval_days = normalize_update_interval_days(
+            entry.data.get(CONF_UPDATE_INTERVAL_DAYS, DEFAULT_UPDATE_INTERVAL_DAYS)
+        )
         super().__init__(
             hass,
             _LOGGER,
             config_entry=entry,
             name=DOMAIN,
-            update_interval=DEFAULT_UPDATE_INTERVAL,
+            update_interval=timedelta(days=update_interval_days),
             always_update=False,
         )
         self.client = client

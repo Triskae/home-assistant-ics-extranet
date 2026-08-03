@@ -8,10 +8,20 @@
         "data": {
           "username": "Identifiant",
           "password": "Mot de passe",
-          "group": "Groupe de l’agence"
+          "group": "Groupe de l’agence",
+          "update_interval_days": "Intervalle d’actualisation"
         },
         "data_description": {
-          "group": "Par exemple, utilisez `agence` si l’URL se termine par `connexion.php?groupe=agence`."
+          "group": "Par exemple, utilisez `agence` si l’URL se termine par `connexion.php?groupe=agence`.",
+          "update_interval_days": "ICS est contacté une fois tous les deux ou trois jours."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurer l’extranet ICS",
+        "description": "Modifiez le groupe de l’agence ou l’intervalle d’actualisation. Le groupe sera validé auprès d’ICS avant l’enregistrement.",
+        "data": {
+          "group": "Groupe de l’agence",
+          "update_interval_days": "Intervalle d’actualisation"
         }
       },
       "reauth_confirm": {
@@ -27,11 +37,21 @@
     "error": {
       "cannot_connect": "Impossible de se connecter ou de lire le compte ICS.",
       "invalid_auth": "ICS a refusé l’identifiant ou le mot de passe.",
+      "already_configured": "Ce compte ICS est déjà configuré.",
       "unknown": "Erreur inattendue. Consultez les journaux Home Assistant."
     },
     "abort": {
       "already_configured": "Ce compte ICS est déjà configuré.",
-      "reauth_successful": "Les identifiants ICS ont été mis à jour."
+      "reauth_successful": "Les identifiants ICS ont été mis à jour.",
+      "reconfigure_successful": "La configuration de l’extranet ICS a été mise à jour."
+    }
+  },
+  "selector": {
+    "update_interval_days": {
+      "options": {
+        "2": "Tous les 2 jours",
+        "3": "Tous les 3 jours"
+      }
     }
   },
   "entity": {

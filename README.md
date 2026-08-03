@@ -17,7 +17,9 @@ Source code and issue tracker: [Triskae/home-assistant-ics-extranet](https://git
 - Balance due and recommended monthly payment sensors in EUR.
 - Date of the latest account operation.
 - Three automatically checked payment indicators for the current quarter.
-- Six-hour polling with one coordinated request cycle for all entities.
+- Configurable polling every two or three days, with one coordinated request
+  cycle for all entities.
+- Reconfiguration of the agency group and polling interval after installation.
 - Reauthentication flow when ICS rejects stored credentials.
 - Diagnostics with username and password redacted and ledger labels omitted.
 - English and French translations.
@@ -30,6 +32,8 @@ Source code and issue tracker: [Triskae/home-assistant-ics-extranet](https://git
 3. Open **Settings → Devices & services → Add integration**.
 4. Search for **ICS Extranet**.
 5. Enter the ICS username, password and agency group.
+6. Choose whether ICS should be checked every two or three days. Two days is
+   the default and fastest supported interval.
 
 The agency group is the value after `groupe=` in the public login URL. For
 example, the group is `agency-name` in:
@@ -76,6 +80,13 @@ python3 ics_poc.py
 It prompts for the agency group, username and password. Environment variables
 `ICS_GROUP` and `ICS_USERNAME` may provide the two non-secret prompts. Avoid
 putting `ICS_PASSWORD` in shell history or committed environment files.
+
+## Reconfiguration
+
+Open **Settings → Devices & services → ICS Extranet**, select the integration's
+menu, then choose **Reconfigure**. The agency group and polling interval can be
+changed without removing the integration. Home Assistant validates the group
+against ICS and reloads the integration automatically.
 
 ## Development
 

@@ -15,20 +15,100 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.util import dt as dt_util
 
 from .client import IcsAuthenticationError, IcsClient, IcsConnectionError
-from .const import CONF_GROUP, DOMAIN
+from .const import (
+    CONF_GROUP,
+    CONF_UPDATE_INTERVAL_DAYS,
+    DEFAULT_UPDATE_INTERVAL_DAYS,
+    DOMAIN,
+    UPDATE_INTERVAL_DAYS,
+    normalize_update_interval_days,
+)
 from .parser import IcsParseError
 
 
-def _schema(defaults: dict[str, str] | None = None) -> vol.Schema:
+def _connection_schema(
+    defaults: dict[str, Any] | None = None,
+    *,
+    include_update_interval: bool,
+) -> vol.Schema:
     values = defaults or {}
+    fields: dict[vol.Marker, object] = {
+        vol.Required(CONF_USERNAME, default=values.get(CONF_USERNAME, "")): str,
+        vol.Required(CONF_PASSWORD): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+        ),
+        vol.Required(CONF_GROUP, default=values.get(CONF_GROUP, "")): str,
+    }
+    if include_update_interval:
+        fields[
+            vol.Required(
+                CONF_UPDATE_INTERVAL_DAYS,
+                default=str(
+                    normalize_update_interval_days(
+                        values.get(
+                            CONF_UPDATE_INTERVAL_DAYS,
+                            DEFAULT_UPDATE_INTERVAL_DAYS,
+                        )
+                    )
+                ),
+            )
+        ] = _update_interval_selector()
+    return vol.Schema(fields)
+
+
+def _settings_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required(CONF_USERNAME, default=values.get(CONF_USERNAME, "")): str,
-            vol.Required(CONF_PASSWORD): selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
-            ),
-            vol.Required(CONF_GROUP, default=values.get(CONF_GROUP, "")): str,
+            vol.Required(CONF_GROUP, default=defaults[CONF_GROUP]): str,
+            vol.Required(
+                CONF_UPDATE_INTERVAL_DAYS,
+                default=str(
+                    normalize_update_interval_days(
+                        defaults.get(
+                            CONF_UPDATE_INTERVAL_DAYS,
+                            DEFAULT_UPDATE_INTERVAL_DAYS,
+                        )
+                    )
+                ),
+            ): _update_interval_selector(),
         }
+    )
+
+
+def _update_interval_selector() -> selector.SelectSelector:
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[str(days) for days in UPDATE_INTERVAL_DAYS],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+            translation_key=CONF_UPDATE_INTERVAL_DAYS,
+        )
+    )
+
+
+def _normalize_settings(user_input: dict[str, Any]) -> dict[str, Any]:
+    return {
+        CONF_GROUP: str(user_input[CONF_GROUP]).strip().lower(),
+        CONF_UPDATE_INTERVAL_DAYS: normalize_update_interval_days(
+            user_input[CONF_UPDATE_INTERVAL_DAYS]
+        ),
+    }
+
+
+def _is_duplicate_account(
+    flow: config_entries.ConfigFlow,
+    *,
+    username: str,
+    group: str,
+    current_entry_id: str | None = None,
+) -> bool:
+    normalized_username = username.strip().casefold()
+    normalized_group = group.strip().casefold()
+    return any(
+        entry.entry_id != current_entry_id
+        and str(entry.data.get(CONF_USERNAME, "")).strip().casefold()
+        == normalized_username
+        and str(entry.data.get(CONF_GROUP, "")).strip().casefold() == normalized_group
+        for entry in flow.hass.config_entries.async_entries(DOMAIN)
     )
 
 
@@ -62,10 +142,10 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the initial setup step."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            data = {
+            data: dict[str, Any] = {
                 CONF_USERNAME: user_input[CONF_USERNAME].strip(),
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
-                CONF_GROUP: user_input[CONF_GROUP].strip().lower(),
+                **_normalize_settings(user_input),
             }
             try:
                 await _validate_input(self.hass, data)
@@ -80,6 +160,12 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _account_unique_id(data[CONF_USERNAME], data[CONF_GROUP])
                 )
                 self._abort_if_unique_id_configured()
+                if _is_duplicate_account(
+                    self,
+                    username=data[CONF_USERNAME],
+                    group=data[CONF_GROUP],
+                ):
+                    return self.async_abort(reason="already_configured")
                 return self.async_create_entry(
                     title=f"ICS Extranet ({data[CONF_GROUP]})",
                     data=data,
@@ -87,7 +173,50 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_schema(user_input),
+            data_schema=_connection_schema(
+                user_input,
+                include_update_interval=True,
+            ),
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Allow the group and polling interval to be changed."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            settings = _normalize_settings(user_input)
+            data = {**entry.data, **settings}
+            try:
+                await _validate_input(self.hass, data)
+            except (IcsConnectionError, IcsParseError, ValueError):
+                errors["base"] = "cannot_connect"
+            except IcsAuthenticationError:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                errors["base"] = "unknown"
+            else:
+                if _is_duplicate_account(
+                    self,
+                    username=data[CONF_USERNAME],
+                    group=data[CONF_GROUP],
+                    current_entry_id=entry.entry_id,
+                ):
+                    errors["base"] = "already_configured"
+                else:
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        title=f"ICS Extranet ({data[CONF_GROUP]})",
+                        data_updates=settings,
+                        reload_even_if_entry_is_unchanged=False,
+                    )
+
+        defaults = user_input or dict(entry.data)
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_settings_schema(defaults),
             errors=errors,
         )
 
@@ -112,6 +241,12 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_USERNAME: user_input[CONF_USERNAME].strip(),
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
                 CONF_GROUP: user_input[CONF_GROUP].strip().lower(),
+                CONF_UPDATE_INTERVAL_DAYS: normalize_update_interval_days(
+                    entry.data.get(
+                        CONF_UPDATE_INTERVAL_DAYS,
+                        DEFAULT_UPDATE_INTERVAL_DAYS,
+                    )
+                ),
             }
             try:
                 await _validate_input(self.hass, data)
@@ -120,15 +255,20 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except (IcsConnectionError, IcsParseError, ValueError):
                 errors["base"] = "cannot_connect"
             else:
-                await self.async_set_unique_id(
-                    _account_unique_id(data[CONF_USERNAME], data[CONF_GROUP])
-                )
-                self._abort_if_unique_id_mismatch()
-                return self.async_update_reload_and_abort(
-                    entry,
-                    data_updates=data,
-                    reason="reauth_successful",
-                )
+                if _is_duplicate_account(
+                    self,
+                    username=data[CONF_USERNAME],
+                    group=data[CONF_GROUP],
+                    current_entry_id=entry.entry_id,
+                ):
+                    errors["base"] = "already_configured"
+                else:
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        title=f"ICS Extranet ({data[CONF_GROUP]})",
+                        data_updates=data,
+                        reason="reauth_successful",
+                    )
 
         defaults = user_input or {
             CONF_USERNAME: entry.data[CONF_USERNAME],
@@ -136,6 +276,9 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=_schema(defaults),
+            data_schema=_connection_schema(
+                defaults,
+                include_update_interval=False,
+            ),
             errors=errors,
         )
