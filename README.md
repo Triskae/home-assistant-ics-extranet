@@ -106,17 +106,25 @@ Run unit tests:
 python3 -m unittest discover -s tests -v
 ```
 
+## Releases
+
+Pushing a semantic-version tag such as `v0.5.0` automatically creates the
+matching GitHub release. Its notes list the commits between the new tag and the
+previous tag and link to the complete GitHub comparison. Keep the version in
+`custom_components/ics_extranet/manifest.json` and the client user-agent aligned
+with the tag.
+
+```bash
+git tag v0.5.0
+git push origin v0.5.0
+```
+
 Run formatting and lint checks:
 
 ```bash
 ruff format --check .
 ruff check .
 ```
-
-## Before publishing on GitHub
-
-- Add HACS and Hassfest validation workflows.
-- Create the first GitHub release after validation passes.
 
 The repository layout already follows the HACS requirement of one integration
 under `custom_components/`.

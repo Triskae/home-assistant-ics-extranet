@@ -51,6 +51,16 @@ class IcsSettingsTest(unittest.TestCase):
                 self.assertEqual(step["data"]["password"], labels[1])
                 self.assertIn("password", step["data_description"])
 
+    def test_manifest_and_client_versions_are_aligned(self) -> None:
+        manifest = json.loads(
+            (INTEGRATION_PATH / "manifest.json").read_text(encoding="utf-8")
+        )
+        client_source = (INTEGRATION_PATH / "client.py").read_text(encoding="utf-8")
+        self.assertIn(
+            f'USER_AGENT: Final = "Home-Assistant-ICS-Extranet/{manifest["version"]}"',
+            client_source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
