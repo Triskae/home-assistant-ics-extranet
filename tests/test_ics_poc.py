@@ -4,10 +4,12 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from ics_poc import (
+    IcsError,
     ReceiptClassification,
     Transaction,
     _ask_monthly_payments,
     _extract_transactions,
+    _normalize_group_input,
     build_monthly_plan,
     build_quarterly_plan,
     detect_receipts,
@@ -16,6 +18,23 @@ from ics_poc import (
 
 
 class IcsPocTest(unittest.TestCase):
+    def test_group_accepts_name_or_full_login_url(self) -> None:
+        self.assertEqual(_normalize_group_input(" MonAgence "), "monagence")
+        self.assertEqual(
+            _normalize_group_input(
+                "https://extranet2.ics.fr/V5/connexion.php?groupe=MonAgence"
+            ),
+            "monagence",
+        )
+        self.assertEqual(
+            _normalize_group_input("connexion.php?groupe=MonAgence"),
+            "monagence",
+        )
+
+    def test_group_url_explains_missing_parameter(self) -> None:
+        with self.assertRaisesRegex(IcsError, "groupe="):
+            _normalize_group_input("https://extranet2.ics.fr/V5/connexion.php")
+
     def test_parse_french_money(self) -> None:
         self.assertEqual(parse_money("1 227,24€"), Decimal("1227.24"))
         self.assertEqual(parse_money("-34,53"), Decimal("-34.53"))
@@ -164,10 +183,11 @@ class IcsPocTest(unittest.TestCase):
         self.assertEqual(plan[1].status, "non applicable")
 
     def test_payment_mode_prompt_accepts_french_answers(self) -> None:
-        with patch("builtins.input", return_value="oui"):
-            self.assertTrue(_ask_monthly_payments(None))
-        with patch("builtins.input", return_value="non"):
-            self.assertFalse(_ask_monthly_payments(None))
+        with patch("builtins.print"):
+            with patch("builtins.input", return_value="oui"):
+                self.assertTrue(_ask_monthly_payments(None))
+            with patch("builtins.input", return_value="non"):
+                self.assertFalse(_ask_monthly_payments(None))
 
 
 if __name__ == "__main__":

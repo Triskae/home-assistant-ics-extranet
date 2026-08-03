@@ -20,12 +20,12 @@ from html.parser import HTMLParser
 from http.cookiejar import CookieJar
 from typing import Final
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urljoin
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener
 
 BASE_URL: Final = "https://extranet2.ics.fr/V5/"
 LOGIN_URL: Final = "https://extranet2.ics.fr/login_externe.php"
-USER_AGENT: Final = "ICS-Extranet-Home-Assistant-POC/0.1"
+USER_AGENT: Final = "ICS-Extranet-Home-Assistant-POC/0.6.0"
 MONEY_PATTERN: Final = re.compile(r"-?[0-9][0-9 .\u00a0]*[,.][0-9]{2}")
 PAYMENT_MODE_MONTHLY: Final = "monthly"
 PAYMENT_MODE_QUARTERLY: Final = "quarterly"
@@ -621,6 +621,7 @@ def _format_money(value: Decimal) -> str:
 
 
 def _print_summary(summary: IcsSummary) -> None:
+    print("=== Résumé de votre compte ICS ===")
     print(f"Solde à payer : {_format_money(summary.balance_due)}")
     mode = "mensualisé" if summary.monthly_payments else "non mensualisé"
     print(f"Mode de paiement : {mode}")
@@ -650,12 +651,16 @@ def _print_summary(summary: IcsSummary) -> None:
 
 def _parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Lit manuellement les charges sur un extranet ICS."
+        description="Lit manuellement les charges sur un extranet ICS.",
+        epilog=(
+            "Le groupe est la valeur placée après 'groupe=' dans l'URL ICS. "
+            "Vous pouvez aussi fournir directement l'URL complète."
+        ),
     )
     parser.add_argument(
         "--group",
         default=os.getenv("ICS_GROUP"),
-        help="groupe de l'agence ICS (ou variable ICS_GROUP)",
+        help="nom du groupe ICS ou URL de connexion complète (ou ICS_GROUP)",
     )
     parser.add_argument(
         "--username",
@@ -684,13 +689,29 @@ def _parse_args(argv: Iterable[str]) -> argparse.Namespace:
 
 def main(argv: Iterable[str] = ()) -> int:
     args = _parse_args(argv)
-    group = args.group or input("Groupe ICS : ").strip()
-    username = args.username or input("Identifiant ICS : ").strip()
-    password = os.getenv("ICS_PASSWORD") or getpass.getpass("Mot de passe ICS : ")
+    if not args.json:
+        _print_welcome()
+
+    try:
+        group = _normalize_group_input(args.group or _ask_group())
+    except IcsError as error:
+        print(f"Erreur : {error}", file=sys.stderr)
+        return 2
+
+    username = args.username or _ask_username()
+    password = os.getenv("ICS_PASSWORD") or _ask_password()
     monthly_payments = _ask_monthly_payments(args.payment_mode)
     if not group or not username or not password:
         print("Groupe, identifiant et mot de passe obligatoires.", file=sys.stderr)
         return 2
+
+    if not args.json:
+        mode = "3 mensualités" if monthly_payments else "paiement trimestriel"
+        print()
+        print("Connexion à ICS en cours…")
+        print(f"  Groupe détecté : {group}")
+        print(f"  Mode choisi : {mode}")
+        print()
 
     try:
         client = IcsClient(group)
@@ -717,14 +738,60 @@ def main(argv: Iterable[str] = ()) -> int:
     return 0
 
 
+def _print_welcome() -> None:
+    print("=== Assistant ICS Extranet ===")
+    print("Ce script se connecte à votre espace ICS et calcule les charges à payer.")
+
+
+def _ask_group() -> str:
+    print()
+    print("[1/4] Où trouver le groupe ICS ?")
+    print("Il se trouve dans votre adresse de connexion, juste après « groupe= ».")
+    print("Exemple : connexion.php?groupe=monagence  →  groupe : monagence")
+    print("Vous pouvez aussi coller directement l’adresse complète.")
+    return input("Groupe ou adresse de connexion ICS : ").strip()
+
+
+def _normalize_group_input(value: str) -> str:
+    candidate = value.strip()
+    parsed = urlparse(candidate)
+    groups = parse_qs(parsed.query).get("groupe", [])
+    if groups and groups[0].strip():
+        candidate = groups[0]
+    elif parsed.scheme or parsed.netloc:
+        raise IcsError(
+            "L’adresse fournie ne contient pas de valeur après « groupe= »."
+        )
+    return candidate.strip().lower()
+
+
+def _ask_username() -> str:
+    print()
+    print("[2/4] Compte ICS")
+    print("Utilisez l’identifiant saisi habituellement sur la page de connexion ICS.")
+    return input("Adresse email ou identifiant ICS : ").strip()
+
+
+def _ask_password() -> str:
+    print()
+    print("[3/4] Mot de passe ICS")
+    print("La saisie reste masquée et le mot de passe n’est pas enregistré.")
+    return getpass.getpass("Mot de passe ICS : ")
+
+
 def _ask_monthly_payments(configured_mode: str | None) -> bool:
     if configured_mode == PAYMENT_MODE_MONTHLY:
         return True
     if configured_mode == PAYMENT_MODE_QUARTERLY:
         return False
 
+    print()
+    print("[4/4] Mode de paiement")
+    print("Oui : l’appel trimestriel est réparti en trois mensualités.")
+    print("Non : le montant restant est affiché en une seule fois.")
     while True:
-        answer = input("Mensualisez-vous vos charges ? [o/n] : ").strip().casefold()
+        answer = input("Payez-vous vos charges en 3 mensualités ? [o/n] : ")
+        answer = answer.strip().casefold()
         if answer in {"o", "oui", "y", "yes"}:
             return True
         if answer in {"n", "non", "no"}:

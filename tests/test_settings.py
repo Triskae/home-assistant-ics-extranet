@@ -14,6 +14,7 @@ sys.modules[SPEC.name] = const
 SPEC.loader.exec_module(const)
 
 INTEGRATION_PATH = Path(__file__).parents[1] / "custom_components" / "ics_extranet"
+POC_PATH = Path(__file__).parents[1] / "ics_poc.py"
 
 
 class IcsSettingsTest(unittest.TestCase):
@@ -56,9 +57,14 @@ class IcsSettingsTest(unittest.TestCase):
             (INTEGRATION_PATH / "manifest.json").read_text(encoding="utf-8")
         )
         client_source = (INTEGRATION_PATH / "client.py").read_text(encoding="utf-8")
+        poc_source = POC_PATH.read_text(encoding="utf-8")
         self.assertIn(
             f'USER_AGENT: Final = "Home-Assistant-ICS-Extranet/{manifest["version"]}"',
             client_source,
+        )
+        self.assertIn(
+            f'USER_AGENT: Final = "ICS-Extranet-Home-Assistant-POC/{manifest["version"]}"',
+            poc_source,
         )
 
 

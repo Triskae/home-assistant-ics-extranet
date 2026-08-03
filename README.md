@@ -85,9 +85,11 @@ the Python standard library:
 python3 ics_poc.py
 ```
 
-It prompts for the agency group, username and password. Environment variables
-`ICS_GROUP` and `ICS_USERNAME` may provide the two non-secret prompts. Avoid
-putting `ICS_PASSWORD` in shell history or committed environment files.
+The guided prompts explain where to find the agency group. You can enter either
+the value after `groupe=` or paste the complete ICS login URL and let the script
+extract it. Environment variables `ICS_GROUP` and `ICS_USERNAME` may provide the
+two non-secret prompts. Avoid putting `ICS_PASSWORD` in shell history or
+committed environment files.
 
 ## Reconfiguration
 
