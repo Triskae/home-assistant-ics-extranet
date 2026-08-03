@@ -24,6 +24,7 @@ Source code and issue tracker: [Triskae/home-assistant-ics-extranet](https://git
 - Reauthentication flow when ICS rejects stored credentials.
 - Diagnostics with username and password redacted and ledger labels omitted.
 - English and French translations.
+- Local ICS brand icon for Home Assistant and HACS.
 
 ## Installation for local testing
 

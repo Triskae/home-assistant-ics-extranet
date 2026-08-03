@@ -24,7 +24,7 @@ from .parser import (
 )
 
 GROUP_PATTERN: Final = re.compile(r"^[a-zA-Z0-9_-]+$")
-USER_AGENT: Final = "Home-Assistant-ICS-Extranet/0.4"
+USER_AGENT: Final = "Home-Assistant-ICS-Extranet/0.4.1"
 
 
 class IcsClientError(Exception):
