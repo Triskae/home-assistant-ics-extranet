@@ -20,7 +20,7 @@ Source code and issue tracker: [Triskae/home-assistant-ics-extranet](https://git
 - Three automatically checked payment indicators for the current quarter.
 - Configurable polling every two or three days, with one coordinated request
   cycle for all entities.
-- Reconfiguration of the agency group and polling interval after installation.
+- Reconfiguration of credentials and account settings after installation.
 - Reauthentication flow when ICS rejects stored credentials.
 - Diagnostics with username and password redacted and ledger labels omitted.
 - English and French translations.
@@ -91,10 +91,11 @@ putting `ICS_PASSWORD` in shell history or committed environment files.
 ## Reconfiguration
 
 Open **Settings → Devices & services → ICS Extranet**, select the integration's
-menu, then choose **Reconfigure**. The agency group, polling interval and
-monthly-payment choice can be changed without removing the integration. Home
-Assistant validates the group against ICS and reloads the integration
-automatically.
+menu, then choose **Reconfigure**. The username, optional replacement password,
+agency group, polling interval and monthly-payment choice can be changed without
+removing the integration. Leaving the password field empty keeps the stored
+password. Home Assistant validates the resulting credentials against ICS and
+reloads the integration automatically.
 
 ## Development
 

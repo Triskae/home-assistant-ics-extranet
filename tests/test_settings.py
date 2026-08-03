@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -11,6 +12,8 @@ assert SPEC is not None and SPEC.loader is not None
 const = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = const
 SPEC.loader.exec_module(const)
+
+INTEGRATION_PATH = Path(__file__).parents[1] / "custom_components" / "ics_extranet"
 
 
 class IcsSettingsTest(unittest.TestCase):
@@ -28,6 +31,25 @@ class IcsSettingsTest(unittest.TestCase):
         self.assertTrue(const.normalize_monthly_payments(None))
         self.assertTrue(const.normalize_monthly_payments(True))
         self.assertFalse(const.normalize_monthly_payments(False))
+
+    def test_reconfigure_credentials_are_translated(self) -> None:
+        expected_labels = {
+            "strings.json": ("Username", "New password (optional)"),
+            "translations/en.json": ("Username", "New password (optional)"),
+            "translations/fr.json": (
+                "Identifiant ou adresse email",
+                "Nouveau mot de passe (facultatif)",
+            ),
+        }
+        for relative_path, labels in expected_labels.items():
+            with self.subTest(relative_path=relative_path):
+                content = json.loads(
+                    (INTEGRATION_PATH / relative_path).read_text(encoding="utf-8")
+                )
+                step = content["config"]["step"]["reconfigure"]
+                self.assertEqual(step["data"]["username"], labels[0])
+                self.assertEqual(step["data"]["password"], labels[1])
+                self.assertIn("password", step["data_description"])
 
 
 if __name__ == "__main__":

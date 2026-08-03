@@ -20,11 +20,16 @@
       },
       "reconfigure": {
         "title": "Reconfigurer l’extranet ICS",
-        "description": "Modifiez le groupe de l’agence ou l’intervalle d’actualisation. Le groupe sera validé auprès d’ICS avant l’enregistrement.",
+        "description": "Modifiez les identifiants ICS ou les paramètres du compte. La connexion sera validée auprès d’ICS avant l’enregistrement.",
         "data": {
+          "username": "Identifiant ou adresse email",
+          "password": "Nouveau mot de passe (facultatif)",
           "group": "Groupe de l’agence",
           "monthly_payments": "Je mensualise mes charges",
           "update_interval_days": "Intervalle d’actualisation"
+        },
+        "data_description": {
+          "password": "Laissez ce champ vide pour conserver le mot de passe actuel."
         }
       },
       "reauth_confirm": {

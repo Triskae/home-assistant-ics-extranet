@@ -37,9 +37,7 @@ def _connection_schema(
     values = defaults or {}
     fields: dict[vol.Marker, object] = {
         vol.Required(CONF_USERNAME, default=values.get(CONF_USERNAME, "")): str,
-        vol.Required(CONF_PASSWORD): selector.TextSelector(
-            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
-        ),
+        vol.Required(CONF_PASSWORD): _password_selector(),
         vol.Required(CONF_GROUP, default=values.get(CONF_GROUP, "")): str,
     }
     if include_update_interval:
@@ -67,9 +65,14 @@ def _connection_schema(
     return vol.Schema(fields)
 
 
-def _settings_schema(defaults: dict[str, Any]) -> vol.Schema:
+def _reconfigure_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
+            vol.Required(
+                CONF_USERNAME,
+                default=defaults[CONF_USERNAME],
+            ): str,
+            vol.Optional(CONF_PASSWORD): _password_selector(),
             vol.Required(CONF_GROUP, default=defaults[CONF_GROUP]): str,
             vol.Required(
                 CONF_UPDATE_INTERVAL_DAYS,
@@ -89,6 +92,12 @@ def _settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                 ),
             ): selector.BooleanSelector(),
         }
+    )
+
+
+def _password_selector() -> selector.TextSelector:
+    return selector.TextSelector(
+        selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
     )
 
 
@@ -112,6 +121,16 @@ def _normalize_settings(user_input: dict[str, Any]) -> dict[str, Any]:
             user_input[CONF_MONTHLY_PAYMENTS]
         ),
     }
+
+
+def _reconfigure_updates(user_input: dict[str, Any]) -> dict[str, Any]:
+    updates = {
+        CONF_USERNAME: str(user_input[CONF_USERNAME]).strip(),
+        **_normalize_settings(user_input),
+    }
+    if new_password := user_input.get(CONF_PASSWORD):
+        updates[CONF_PASSWORD] = new_password
+    return updates
 
 
 def _is_duplicate_account(
@@ -206,12 +225,12 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Allow the group and polling interval to be changed."""
+        """Allow credentials and account settings to be changed."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            settings = _normalize_settings(user_input)
-            data = {**entry.data, **settings}
+            updates = _reconfigure_updates(user_input)
+            data = {**entry.data, **updates}
             try:
                 await _validate_input(self.hass, data)
             except (IcsConnectionError, IcsParseError, ValueError):
@@ -232,14 +251,14 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     return self.async_update_reload_and_abort(
                         entry,
                         title=f"ICS Extranet ({data[CONF_GROUP]})",
-                        data_updates=settings,
+                        data_updates=updates,
                         reload_even_if_entry_is_unchanged=False,
                     )
 
         defaults = user_input or dict(entry.data)
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_settings_schema(defaults),
+            data_schema=_reconfigure_schema(defaults),
             errors=errors,
         )
 

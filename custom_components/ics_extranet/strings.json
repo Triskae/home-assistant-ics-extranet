@@ -20,11 +20,16 @@
       },
       "reconfigure": {
         "title": "Reconfigure ICS Extranet",
-        "description": "Change the agency group or polling interval. The group will be validated with ICS before saving.",
+        "description": "Change the ICS credentials or account settings. The connection will be validated with ICS before saving.",
         "data": {
+          "username": "Username",
+          "password": "New password (optional)",
           "group": "Agency group",
           "monthly_payments": "I pay my charges monthly",
           "update_interval_days": "Polling interval"
+        },
+        "data_description": {
+          "password": "Leave this field empty to keep the current password."
         }
       },
       "reauth_confirm": {
