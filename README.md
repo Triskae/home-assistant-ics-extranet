@@ -1,0 +1,101 @@
+# ICS Extranet for Home Assistant
+
+Unofficial Home Assistant custom integration for property-management portals
+hosted on `extranet2.ics.fr` (ICS Extranet V5).
+
+Source code and issue tracker: [Triskae/home-assistant-ics-extranet](https://github.com/Triskae/home-assistant-ics-extranet)
+
+> [!WARNING]
+> This project is not affiliated with or endorsed by ICS. It reads the same
+> server-rendered HTML pages that an authenticated user can access. A future
+> change to the portal may require an integration update.
+
+## Features
+
+- UI-based setup through **Settings → Devices & services**.
+- Dedicated cookie session; no browser automation is required.
+- Balance due and recommended monthly payment sensors in EUR.
+- Date of the latest account operation.
+- Three automatically checked payment indicators for the current quarter.
+- Six-hour polling with one coordinated request cycle for all entities.
+- Reauthentication flow when ICS rejects stored credentials.
+- Diagnostics with username and password redacted and ledger labels omitted.
+- English and French translations.
+
+## Installation for local testing
+
+1. Copy `custom_components/ics_extranet` into the Home Assistant
+   `/config/custom_components/` directory.
+2. Restart Home Assistant.
+3. Open **Settings → Devices & services → Add integration**.
+4. Search for **ICS Extranet**.
+5. Enter the ICS username, password and agency group.
+
+The agency group is the value after `groupe=` in the public login URL. For
+example, the group is `agency-name` in:
+
+```text
+https://extranet2.ics.fr/V5/connexion.php?groupe=agency-name
+```
+
+## Entities
+
+| Entity | Purpose |
+|---|---|
+| Balance due | Current positive balance shown by ICS |
+| Recommended monthly payment | Remaining balance divided over unpaid months of the current quarter |
+| Last account operation | Date of the latest parsed ledger operation |
+| Payment `YYYY-MM` (three entities) | Automatically on when a transfer for that month is detected or the month is otherwise settled |
+
+The monthly calculation is an estimate. It detects ledger rows containing
+`Votre virement`, groups them by month in the current quarter, and distributes
+the current positive balance over the remaining months. ICS remains the source
+of truth for the legally payable amount.
+
+## Privacy and security
+
+- No account, address, e-mail, phone number, balance or authenticated URL is
+  included in this repository or its test fixtures.
+- Credentials are stored in the Home Assistant config entry, like credentials
+  for other UI-configured integrations. Protect Home Assistant backups and
+  restrict access to the `/config` directory.
+- Passwords and usernames are redacted from diagnostics.
+- Raw HTML, cookies, credentials and ledger labels are never logged.
+- The client validates TLS certificates and only connects to the fixed
+  `https://extranet2.ics.fr` origin.
+
+## Manual CLI probe
+
+The original manual probe remains available for troubleshooting and uses only
+the Python standard library:
+
+```bash
+python3 ics_poc.py
+```
+
+It prompts for the agency group, username and password. Environment variables
+`ICS_GROUP` and `ICS_USERNAME` may provide the two non-secret prompts. Avoid
+putting `ICS_PASSWORD` in shell history or committed environment files.
+
+## Development
+
+Run unit tests:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Run formatting and lint checks:
+
+```bash
+ruff format --check .
+ruff check .
+```
+
+## Before publishing on GitHub
+
+- Add HACS and Hassfest validation workflows.
+- Create the first GitHub release after validation passes.
+
+The repository layout already follows the HACS requirement of one integration
+under `custom_components/`.

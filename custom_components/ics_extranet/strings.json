@@ -1,0 +1,55 @@
+{
+  "title": "ICS Extranet",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to ICS Extranet",
+        "description": "Use the credentials shown on your property-management documents. The group is the value after `groupe=` in your ICS login URL.",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "group": "Agency group"
+        },
+        "data_description": {
+          "group": "For example, use `agency` for a login URL ending in `connexion.php?groupe=agency`."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to ICS Extranet",
+        "description": "Enter valid ICS credentials to resume updates.",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "group": "Agency group"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect or read the ICS account.",
+      "invalid_auth": "ICS rejected the username or password.",
+      "unknown": "Unexpected error. Check the Home Assistant logs."
+    },
+    "abort": {
+      "already_configured": "This ICS account is already configured.",
+      "reauth_successful": "ICS credentials were updated successfully."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "balance_due": {
+        "name": "Balance due"
+      },
+      "monthly_recommendation": {
+        "name": "Recommended monthly payment"
+      },
+      "last_operation": {
+        "name": "Last account operation"
+      }
+    },
+    "binary_sensor": {
+      "quarter_payment": {
+        "name": "Payment {month}"
+      }
+    }
+  }
+}
