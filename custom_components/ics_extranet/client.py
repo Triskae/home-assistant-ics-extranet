@@ -9,7 +9,12 @@ from urllib.parse import urlencode, urljoin
 
 from aiohttp import ClientError, ClientResponseError, ClientSession, ClientTimeout
 
-from .const import ICS_ORIGIN, ICS_VERSION, REQUEST_TIMEOUT_SECONDS
+from .const import (
+    DEFAULT_MONTHLY_PAYMENTS,
+    ICS_ORIGIN,
+    ICS_VERSION,
+    REQUEST_TIMEOUT_SECONDS,
+)
 from .parser import (
     IcsParseError,
     IcsSummary,
@@ -19,7 +24,7 @@ from .parser import (
 )
 
 GROUP_PATTERN: Final = re.compile(r"^[a-zA-Z0-9_-]+$")
-USER_AGENT: Final = "Home-Assistant-ICS-Extranet/0.1"
+USER_AGENT: Final = "Home-Assistant-ICS-Extranet/0.3"
 
 
 class IcsClientError(Exception):
@@ -44,6 +49,7 @@ class IcsClient:
         username: str,
         password: str,
         group: str,
+        monthly_payments: bool = DEFAULT_MONTHLY_PAYMENTS,
     ) -> None:
         normalized_group = group.strip().lower()
         if not GROUP_PATTERN.fullmatch(normalized_group):
@@ -52,6 +58,7 @@ class IcsClient:
         self._username = username.strip()
         self._password = password
         self._group = normalized_group
+        self._monthly_payments = monthly_payments
         self._authenticated = False
 
     @property
@@ -114,6 +121,7 @@ class IcsClient:
             ledger_html=ledger_html,
             today=today,
             fetched_at=datetime.now().astimezone(),
+            monthly_payments=self._monthly_payments,
         )
 
     async def _request_text(

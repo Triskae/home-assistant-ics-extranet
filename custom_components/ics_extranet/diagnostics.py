@@ -28,12 +28,27 @@ async def async_get_config_entry_diagnostics(
             "balance_due": str(data.balance_due),
             "monthly_recommendation": str(data.monthly_recommendation),
             "account_period": data.account_period,
+            "charge_call_date": (
+                data.charge_call_date.isoformat()
+                if data.charge_call_date is not None
+                else None
+            ),
+            "monthly_payments": data.monthly_payments,
             "last_operation_date": (
                 data.last_operation_date.isoformat()
                 if data.last_operation_date is not None
                 else None
             ),
             "transaction_count": data.transaction_count,
+            "receipt_detections": [
+                {
+                    "operation_date": detection.operation_date.isoformat(),
+                    "amount": str(detection.amount),
+                    "classification": detection.classification.value,
+                    "reason": detection.reason,
+                }
+                for detection in data.receipt_detections
+            ],
             "fetched_at": data.fetched_at.isoformat(),
             "payments": [
                 {

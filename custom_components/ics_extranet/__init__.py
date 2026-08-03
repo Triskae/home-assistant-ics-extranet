@@ -9,7 +9,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .client import IcsClient
-from .const import CONF_GROUP
+from .const import (
+    CONF_GROUP,
+    CONF_MONTHLY_PAYMENTS,
+    DEFAULT_MONTHLY_PAYMENTS,
+    normalize_monthly_payments,
+)
 from .coordinator import IcsDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -23,6 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         username=entry.data[CONF_USERNAME],
         password=entry.data[CONF_PASSWORD],
         group=entry.data[CONF_GROUP],
+        monthly_payments=normalize_monthly_payments(
+            entry.data.get(CONF_MONTHLY_PAYMENTS, DEFAULT_MONTHLY_PAYMENTS)
+        ),
     )
     coordinator = IcsDataUpdateCoordinator(hass, entry, client)
     entry.runtime_data = coordinator

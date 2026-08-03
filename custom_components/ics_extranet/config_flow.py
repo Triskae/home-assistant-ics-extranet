@@ -9,7 +9,7 @@ import voluptuous as vol
 from aiohttp import CookieJar
 from homeassistant import config_entries
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.data_entry_flow import ConfigFlowResult
+from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.util import dt as dt_util
@@ -17,10 +17,13 @@ from homeassistant.util import dt as dt_util
 from .client import IcsAuthenticationError, IcsClient, IcsConnectionError
 from .const import (
     CONF_GROUP,
+    CONF_MONTHLY_PAYMENTS,
     CONF_UPDATE_INTERVAL_DAYS,
+    DEFAULT_MONTHLY_PAYMENTS,
     DEFAULT_UPDATE_INTERVAL_DAYS,
     DOMAIN,
     UPDATE_INTERVAL_DAYS,
+    normalize_monthly_payments,
     normalize_update_interval_days,
 )
 from .parser import IcsParseError
@@ -53,6 +56,14 @@ def _connection_schema(
                 ),
             )
         ] = _update_interval_selector()
+        fields[
+            vol.Required(
+                CONF_MONTHLY_PAYMENTS,
+                default=normalize_monthly_payments(
+                    values.get(CONF_MONTHLY_PAYMENTS, DEFAULT_MONTHLY_PAYMENTS)
+                ),
+            )
+        ] = selector.BooleanSelector()
     return vol.Schema(fields)
 
 
@@ -71,6 +82,12 @@ def _settings_schema(defaults: dict[str, Any]) -> vol.Schema:
                     )
                 ),
             ): _update_interval_selector(),
+            vol.Required(
+                CONF_MONTHLY_PAYMENTS,
+                default=normalize_monthly_payments(
+                    defaults.get(CONF_MONTHLY_PAYMENTS, DEFAULT_MONTHLY_PAYMENTS)
+                ),
+            ): selector.BooleanSelector(),
         }
     )
 
@@ -90,6 +107,9 @@ def _normalize_settings(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_GROUP: str(user_input[CONF_GROUP]).strip().lower(),
         CONF_UPDATE_INTERVAL_DAYS: normalize_update_interval_days(
             user_input[CONF_UPDATE_INTERVAL_DAYS]
+        ),
+        CONF_MONTHLY_PAYMENTS: normalize_monthly_payments(
+            user_input[CONF_MONTHLY_PAYMENTS]
         ),
     }
 
@@ -117,7 +137,7 @@ def _account_unique_id(username: str, group: str) -> str:
     return sha256(normalized.encode()).hexdigest()[:24]
 
 
-async def _validate_input(hass, data: dict[str, str]) -> None:
+async def _validate_input(hass, data: dict[str, Any]) -> None:
     session = async_create_clientsession(hass, cookie_jar=CookieJar())
     try:
         client = IcsClient(
@@ -125,6 +145,9 @@ async def _validate_input(hass, data: dict[str, str]) -> None:
             username=data[CONF_USERNAME],
             password=data[CONF_PASSWORD],
             group=data[CONF_GROUP],
+            monthly_payments=normalize_monthly_payments(
+                data.get(CONF_MONTHLY_PAYMENTS, DEFAULT_MONTHLY_PAYMENTS)
+            ),
         )
         await client.async_fetch_summary(dt_util.now().date())
     finally:
@@ -138,7 +161,7 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Handle the initial setup step."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -182,7 +205,7 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Allow the group and polling interval to be changed."""
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
@@ -220,7 +243,7 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
         """Start reauthentication."""
         entry = self._get_reauth_entry()
         return await self.async_step_reauth_confirm(
@@ -232,7 +255,7 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Validate and store replacement credentials."""
         errors: dict[str, str] = {}
         entry = self._get_reauth_entry()
@@ -245,6 +268,12 @@ class IcsExtranetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     entry.data.get(
                         CONF_UPDATE_INTERVAL_DAYS,
                         DEFAULT_UPDATE_INTERVAL_DAYS,
+                    )
+                ),
+                CONF_MONTHLY_PAYMENTS: normalize_monthly_payments(
+                    entry.data.get(
+                        CONF_MONTHLY_PAYMENTS,
+                        DEFAULT_MONTHLY_PAYMENTS,
                     )
                 ),
             }

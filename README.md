@@ -14,7 +14,8 @@ Source code and issue tracker: [Triskae/home-assistant-ics-extranet](https://git
 
 - UI-based setup through **Settings → Devices & services**.
 - Dedicated cookie session; no browser automation is required.
-- Balance due and recommended monthly payment sensors in EUR.
+- Balance due and recommended payment sensors in EUR.
+- User-selectable monthly or quarterly charge-payment mode.
 - Date of the latest account operation.
 - Three automatically checked payment indicators for the current quarter.
 - Configurable polling every two or three days, with one coordinated request
@@ -34,6 +35,8 @@ Source code and issue tracker: [Triskae/home-assistant-ics-extranet](https://git
 5. Enter the ICS username, password and agency group.
 6. Choose whether ICS should be checked every two or three days. Two days is
    the default and fastest supported interval.
+7. Indicate whether the quarterly charges are paid in three monthly
+   instalments.
 
 The agency group is the value after `groupe=` in the public login URL. For
 example, the group is `agency-name` in:
@@ -51,10 +54,14 @@ https://extranet2.ics.fr/V5/connexion.php?groupe=agency-name
 | Last account operation | Date of the latest parsed ledger operation |
 | Payment `YYYY-MM` (three entities) | Automatically on when a transfer for that month is detected or the month is otherwise settled |
 
-The monthly calculation is an estimate. It detects ledger rows containing
-`Votre virement`, groups them by month in the current quarter, and distributes
-the current positive balance over the remaining months. ICS remains the source
-of truth for the legally payable amount.
+In monthly mode, the integration detects the current `Appel trimestriel`, takes
+the account balance at the end of that charge-call date, and divides it into
+three instalments. Positive receipts containing payment terms such as
+`virement`, `prélèvement`, `règlement` or `paiement` automatically mark the
+corresponding months as paid. Refunds and adjustments are excluded, while an
+unknown receipt is kept as ambiguous and never checked automatically. In
+quarterly mode, the recommended payment stays undivided until the account is
+settled. ICS remains the source of truth for the legally payable amount.
 
 ## Privacy and security
 
@@ -84,9 +91,10 @@ putting `ICS_PASSWORD` in shell history or committed environment files.
 ## Reconfiguration
 
 Open **Settings → Devices & services → ICS Extranet**, select the integration's
-menu, then choose **Reconfigure**. The agency group and polling interval can be
-changed without removing the integration. Home Assistant validates the group
-against ICS and reloads the integration automatically.
+menu, then choose **Reconfigure**. The agency group, polling interval and
+monthly-payment choice can be changed without removing the integration. Home
+Assistant validates the group against ICS and reloads the integration
+automatically.
 
 ## Development
 

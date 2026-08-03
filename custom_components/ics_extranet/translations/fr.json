@@ -9,11 +9,13 @@
           "username": "Identifiant",
           "password": "Mot de passe",
           "group": "Groupe de l’agence",
+          "monthly_payments": "Je mensualise mes charges",
           "update_interval_days": "Intervalle d’actualisation"
         },
         "data_description": {
           "group": "Par exemple, utilisez `agence` si l’URL se termine par `connexion.php?groupe=agence`.",
-          "update_interval_days": "ICS est contacté une fois tous les deux ou trois jours."
+          "update_interval_days": "ICS est contacté une fois tous les deux ou trois jours.",
+          "monthly_payments": "Activez cette option pour diviser l’appel de charges trimestriel en trois mensualités."
         }
       },
       "reconfigure": {
@@ -21,6 +23,7 @@
         "description": "Modifiez le groupe de l’agence ou l’intervalle d’actualisation. Le groupe sera validé auprès d’ICS avant l’enregistrement.",
         "data": {
           "group": "Groupe de l’agence",
+          "monthly_payments": "Je mensualise mes charges",
           "update_interval_days": "Intervalle d’actualisation"
         }
       },
@@ -60,7 +63,7 @@
         "name": "Solde à payer"
       },
       "monthly_recommendation": {
-        "name": "Mensualité conseillée"
+        "name": "Paiement conseillé"
       },
       "last_operation": {
         "name": "Dernière opération comptable"

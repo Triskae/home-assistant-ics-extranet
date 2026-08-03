@@ -24,6 +24,11 @@ class IcsSettingsTest(unittest.TestCase):
     def test_invalid_polling_falls_back_to_two_days(self) -> None:
         self.assertEqual(const.normalize_update_interval_days("invalid"), 2)
 
+    def test_monthly_payment_mode_defaults_to_enabled(self) -> None:
+        self.assertTrue(const.normalize_monthly_payments(None))
+        self.assertTrue(const.normalize_monthly_payments(True))
+        self.assertFalse(const.normalize_monthly_payments(False))
+
 
 if __name__ == "__main__":
     unittest.main()

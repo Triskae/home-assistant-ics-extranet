@@ -16,7 +16,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import ATTR_ACCOUNT_PERIOD, ATTR_TRANSACTION_COUNT
+from .const import (
+    ATTR_ACCOUNT_PERIOD,
+    ATTR_CHARGE_CALL_DATE,
+    ATTR_PAYMENT_MODE,
+    ATTR_TRANSACTION_COUNT,
+)
 from .coordinator import IcsDataUpdateCoordinator
 from .entity import IcsCoordinatorEntity
 from .parser import IcsSummary
@@ -99,5 +104,13 @@ class IcsSensor(IcsCoordinatorEntity, SensorEntity):
             return None
         return {
             ATTR_ACCOUNT_PERIOD: self.coordinator.data.account_period or "",
+            ATTR_CHARGE_CALL_DATE: (
+                self.coordinator.data.charge_call_date.isoformat()
+                if self.coordinator.data.charge_call_date is not None
+                else ""
+            ),
+            ATTR_PAYMENT_MODE: (
+                "monthly" if self.coordinator.data.monthly_payments else "quarterly"
+            ),
             ATTR_TRANSACTION_COUNT: self.coordinator.data.transaction_count,
         }

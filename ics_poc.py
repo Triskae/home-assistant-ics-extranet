@@ -10,10 +10,12 @@ import os
 import re
 import ssl
 import sys
+import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from enum import StrEnum
 from html.parser import HTMLParser
 from http.cookiejar import CookieJar
 from typing import Final
@@ -25,10 +27,29 @@ BASE_URL: Final = "https://extranet2.ics.fr/V5/"
 LOGIN_URL: Final = "https://extranet2.ics.fr/login_externe.php"
 USER_AGENT: Final = "ICS-Extranet-Home-Assistant-POC/0.1"
 MONEY_PATTERN: Final = re.compile(r"-?[0-9][0-9 .\u00a0]*[,.][0-9]{2}")
+PAYMENT_MODE_MONTHLY: Final = "monthly"
+PAYMENT_MODE_QUARTERLY: Final = "quarterly"
+PAYMENT_KEYWORDS: Final = ("virement", "prelevement", "reglement", "paiement")
+EXCLUDED_RECEIPT_KEYWORDS: Final = (
+    "remboursement",
+    "rbt",
+    "regularisation",
+    "solde charges",
+    "avoir",
+    "reception fonds",
+)
 
 
 class IcsError(RuntimeError):
     """Erreur lisible liée à l'extranet ICS."""
+
+
+class ReceiptClassification(StrEnum):
+    """Niveau de confiance attribué à une recette ICS."""
+
+    CONFIRMED_PAYMENT = "paiement_confirmé"
+    EXCLUDED_CREDIT = "crédit_exclu"
+    AMBIGUOUS_RECEIPT = "recette_à_vérifier"
 
 
 @dataclass(frozen=True)
@@ -49,13 +70,24 @@ class MonthlyPayment:
 
 
 @dataclass(frozen=True)
+class ReceiptDetection:
+    operation_date: date
+    label: str
+    amount: Decimal
+    classification: ReceiptClassification
+    reason: str
+
+
+@dataclass(frozen=True)
 class IcsSummary:
     fetched_at: str
     balance_due: Decimal
     monthly_recommendation: Decimal
+    monthly_payments: bool
     account_period: str | None
     last_operation_date: str | None
     payments: tuple[MonthlyPayment, ...]
+    receipt_detections: tuple[ReceiptDetection, ...]
     transactions: tuple[Transaction, ...]
 
 
@@ -173,25 +205,45 @@ class IcsClient:
         if "connexion" in final_url and "initialisation" not in final_url:
             raise IcsError("ICS a renvoyé vers la page de connexion.")
 
-    def fetch_summary(self, today: date) -> IcsSummary:
+    def fetch_summary(self, today: date, *, monthly_payments: bool) -> IcsSummary:
         accounting_html = self._get(urljoin(BASE_URL, "comptabilite.html"))
         balance_due = _extract_balance_due(accounting_html)
         account_url = _extract_account_url(accounting_html)
         account_html = self._get(account_url)
         transactions, account_period = _extract_transactions(account_html)
-        payments = build_monthly_plan(balance_due, transactions, today)
-        amounts_due = [p.amount for p in payments if p.status == "à payer"]
+        receipt_detections = detect_receipts(transactions, today)
+        if monthly_payments:
+            payments = build_monthly_plan(
+                balance_due,
+                transactions,
+                today,
+                receipt_detections=receipt_detections,
+            )
+        else:
+            payments = build_quarterly_plan(
+                balance_due,
+                transactions,
+                today,
+                receipt_detections=receipt_detections,
+            )
+        amounts_due = [
+            payment.amount
+            for payment in payments
+            if payment.status in {"à payer", "aucun paiement détecté"}
+        ]
         recommendation = amounts_due[0] if amounts_due else Decimal("0.00")
 
         return IcsSummary(
             fetched_at=datetime.now().astimezone().isoformat(timespec="seconds"),
             balance_due=balance_due,
             monthly_recommendation=recommendation,
+            monthly_payments=monthly_payments,
             account_period=account_period,
             last_operation_date=(
                 transactions[-1].operation_date.isoformat() if transactions else None
             ),
             payments=payments,
+            receipt_detections=receipt_detections,
             transactions=transactions,
         )
 
@@ -328,29 +380,36 @@ def _extract_transactions(html: str) -> tuple[tuple[Transaction, ...], str | Non
 
 
 def build_monthly_plan(
-    balance_due: Decimal, transactions: Sequence[Transaction], today: date
+    balance_due: Decimal,
+    transactions: Sequence[Transaction],
+    today: date,
+    *,
+    receipt_detections: Sequence[ReceiptDetection] | None = None,
 ) -> tuple[MonthlyPayment, ...]:
     quarter_start_month = ((today.month - 1) // 3) * 3 + 1
     months = [date(today.year, quarter_start_month + offset, 1) for offset in range(3)]
     receipts_by_month = {month.month: Decimal("0.00") for month in months}
 
-    for transaction in transactions:
-        if (
-            transaction.operation_date.year == today.year
-            and transaction.operation_date.month in receipts_by_month
-            and transaction.receipt is not None
-            and "votre virement" in transaction.label.casefold()
-        ):
-            month = transaction.operation_date.month
-            receipts_by_month[month] += transaction.receipt
+    detections = (
+        detect_receipts(transactions, today)
+        if receipt_detections is None
+        else receipt_detections
+    )
+    for detection in detections:
+        if detection.classification is ReceiptClassification.CONFIRMED_PAYMENT:
+            receipts_by_month[detection.operation_date.month] += detection.amount
 
-    unpaid_months = [
-        month
-        for month in months
-        if month.month >= today.month and receipts_by_month[month.month] == 0
-    ]
-    split_amounts = _split_money(balance_due, len(unpaid_months))
-    amount_by_month = dict(zip(unpaid_months, split_amounts, strict=True))
+    expected_amounts = _expected_monthly_amounts(transactions, today)
+    if len(expected_amounts) == len(months):
+        amount_by_month = dict(zip(months, expected_amounts, strict=True))
+    else:
+        unpaid_months = [
+            month
+            for month in months
+            if month.month >= today.month and receipts_by_month[month.month] == 0
+        ]
+        split_amounts = _split_money(balance_due, len(unpaid_months))
+        amount_by_month = dict(zip(unpaid_months, split_amounts, strict=True))
 
     result: list[MonthlyPayment] = []
     for month in months:
@@ -360,10 +419,9 @@ def build_monthly_plan(
             status = "payé (détecté ICS)"
         elif month in amount_by_month:
             amount = amount_by_month[month]
-            status = "à payer"
-        elif month.month < today.month:
-            amount = Decimal("0.00")
-            status = "aucun virement détecté"
+            status = (
+                "aucun paiement détecté" if month.month < today.month else "à payer"
+            )
         else:
             amount = Decimal("0.00")
             status = "soldé"
@@ -376,6 +434,167 @@ def build_monthly_plan(
             )
         )
     return tuple(result)
+
+
+def build_quarterly_plan(
+    balance_due: Decimal,
+    transactions: Sequence[Transaction],
+    today: date,
+    *,
+    receipt_detections: Sequence[ReceiptDetection] | None = None,
+) -> tuple[MonthlyPayment, ...]:
+    """Afficher le montant restant une seule fois lorsqu'il n'est pas mensualisé."""
+    quarter_start_month = ((today.month - 1) // 3) * 3 + 1
+    months = [date(today.year, quarter_start_month + offset, 1) for offset in range(3)]
+    charge_call = _find_quarter_charge_call(transactions, today)
+    due_month = (
+        charge_call.operation_date.month if charge_call is not None else months[0].month
+    )
+    detections = (
+        detect_receipts(transactions, today)
+        if receipt_detections is None
+        else receipt_detections
+    )
+    detected = sum(
+        (
+            detection.amount
+            for detection in detections
+            if detection.classification is ReceiptClassification.CONFIRMED_PAYMENT
+        ),
+        start=Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+
+    result: list[MonthlyPayment] = []
+    for month in months:
+        if month.month != due_month:
+            amount = Decimal("0.00")
+            status = "non applicable"
+            month_detected = Decimal("0.00")
+        elif balance_due <= 0 and detected > 0:
+            amount = detected
+            status = "payé (détecté ICS)"
+            month_detected = detected
+        elif balance_due <= 0:
+            amount = Decimal("0.00")
+            status = "soldé"
+            month_detected = Decimal("0.00")
+        else:
+            amount = balance_due.quantize(Decimal("0.01"))
+            status = "à payer"
+            month_detected = detected
+        result.append(
+            MonthlyPayment(
+                month=month.strftime("%Y-%m"),
+                amount=amount,
+                status=status,
+                detected_receipts=month_detected,
+            )
+        )
+    return tuple(result)
+
+
+def detect_receipts(
+    transactions: Sequence[Transaction], today: date
+) -> tuple[ReceiptDetection, ...]:
+    """Classer les recettes du trimestre sans dépendre d'un libellé exact."""
+    quarter_start_month = ((today.month - 1) // 3) * 3 + 1
+    quarter_months = range(quarter_start_month, quarter_start_month + 3)
+    expected_amounts = _expected_monthly_amounts(transactions, today)
+    detections: list[ReceiptDetection] = []
+
+    for transaction in transactions:
+        if (
+            transaction.operation_date.year != today.year
+            or transaction.operation_date.month not in quarter_months
+            or transaction.receipt is None
+            or transaction.receipt <= 0
+        ):
+            continue
+
+        normalized_label = _normalize_label(transaction.label)
+        if keyword := _matching_keyword(normalized_label, EXCLUDED_RECEIPT_KEYWORDS):
+            classification = ReceiptClassification.EXCLUDED_CREDIT
+            reason = f"libellé exclu : {keyword}"
+        elif keyword := _matching_keyword(normalized_label, PAYMENT_KEYWORDS):
+            classification = ReceiptClassification.CONFIRMED_PAYMENT
+            reason = f"mot-clé de paiement : {keyword}"
+        elif any(
+            abs(transaction.receipt - expected) <= Decimal("0.01")
+            for expected in expected_amounts
+        ):
+            classification = ReceiptClassification.AMBIGUOUS_RECEIPT
+            reason = "montant compatible avec une mensualité, libellé inconnu"
+        else:
+            classification = ReceiptClassification.AMBIGUOUS_RECEIPT
+            reason = "recette positive avec un libellé inconnu"
+
+        detections.append(
+            ReceiptDetection(
+                operation_date=transaction.operation_date,
+                label=transaction.label,
+                amount=transaction.receipt,
+                classification=classification,
+                reason=reason,
+            )
+        )
+    return tuple(detections)
+
+
+def _expected_monthly_amounts(
+    transactions: Sequence[Transaction], today: date
+) -> tuple[Decimal, ...]:
+    charge_call = _find_quarter_charge_call(transactions, today)
+    if charge_call is None:
+        return ()
+    end_of_day_balance = next(
+        (
+            transaction.balance
+            for transaction in reversed(transactions)
+            if transaction.operation_date == charge_call.operation_date
+        ),
+        charge_call.balance,
+    )
+    return _split_money(max(end_of_day_balance, Decimal("0.00")), 3)
+
+
+def _find_quarter_charge_call(
+    transactions: Sequence[Transaction], today: date
+) -> Transaction | None:
+    quarter_start_month = ((today.month - 1) // 3) * 3 + 1
+    return next(
+        (
+            transaction
+            for transaction in reversed(transactions)
+            if transaction.operation_date.year == today.year
+            and quarter_start_month
+            <= transaction.operation_date.month
+            < quarter_start_month + 3
+            and "appel trimestriel" in _normalize_label(transaction.label)
+        ),
+        None,
+    )
+
+
+def _normalize_label(label: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", label.casefold())
+    return " ".join(
+        "".join(
+            character
+            for character in decomposed
+            if not unicodedata.combining(character)
+        ).split()
+    )
+
+
+def _matching_keyword(label: str, keywords: Sequence[str]) -> str | None:
+    return next(
+        (
+            keyword
+            for keyword in keywords
+            if re.search(rf"\b{re.escape(keyword)}\b", label)
+        ),
+        None,
+    )
 
 
 def _split_money(amount: Decimal, count: int) -> tuple[Decimal, ...]:
@@ -403,7 +622,9 @@ def _format_money(value: Decimal) -> str:
 
 def _print_summary(summary: IcsSummary) -> None:
     print(f"Solde à payer : {_format_money(summary.balance_due)}")
-    print(f"Mensualité conseillée : {_format_money(summary.monthly_recommendation)}")
+    mode = "mensualisé" if summary.monthly_payments else "non mensualisé"
+    print(f"Mode de paiement : {mode}")
+    print(f"Paiement conseillé : {_format_money(summary.monthly_recommendation)}")
     if summary.account_period:
         print(summary.account_period)
     print()
@@ -412,6 +633,17 @@ def _print_summary(summary: IcsSummary) -> None:
         print(
             f"  {payment.month}  {_format_money(payment.amount):>12}  {payment.status}"
         )
+    print()
+    print("Analyse des recettes du trimestre :")
+    if not summary.receipt_detections:
+        print("  aucune recette positive détectée")
+    for detection in summary.receipt_detections:
+        print(
+            f"  {detection.operation_date.isoformat()}  "
+            f"{_format_money(detection.amount):>12}  "
+            f"{detection.classification.value} — {detection.reason}"
+        )
+        print(f"    libellé ICS : {detection.label}")
     print()
     print(f"Dernière opération ICS : {summary.last_operation_date or 'inconnue'}")
 
@@ -429,6 +661,12 @@ def _parse_args(argv: Iterable[str]) -> argparse.Namespace:
         "--username",
         default=os.getenv("ICS_USERNAME"),
         help="identifiant ICS (ou variable ICS_USERNAME)",
+    )
+    parser.add_argument(
+        "--payment-mode",
+        choices=(PAYMENT_MODE_MONTHLY, PAYMENT_MODE_QUARTERLY),
+        default=os.getenv("ICS_PAYMENT_MODE"),
+        help="mode de paiement : monthly ou quarterly",
     )
     parser.add_argument(
         "--json",
@@ -449,6 +687,7 @@ def main(argv: Iterable[str] = ()) -> int:
     group = args.group or input("Groupe ICS : ").strip()
     username = args.username or input("Identifiant ICS : ").strip()
     password = os.getenv("ICS_PASSWORD") or getpass.getpass("Mot de passe ICS : ")
+    monthly_payments = _ask_monthly_payments(args.payment_mode)
     if not group or not username or not password:
         print("Groupe, identifiant et mot de passe obligatoires.", file=sys.stderr)
         return 2
@@ -456,7 +695,10 @@ def main(argv: Iterable[str] = ()) -> int:
     try:
         client = IcsClient(group)
         client.login(username, password)
-        summary = client.fetch_summary(args.date)
+        summary = client.fetch_summary(
+            args.date,
+            monthly_payments=monthly_payments,
+        )
     except IcsError as error:
         print(f"Erreur : {error}", file=sys.stderr)
         return 1
@@ -473,6 +715,21 @@ def main(argv: Iterable[str] = ()) -> int:
     else:
         _print_summary(summary)
     return 0
+
+
+def _ask_monthly_payments(configured_mode: str | None) -> bool:
+    if configured_mode == PAYMENT_MODE_MONTHLY:
+        return True
+    if configured_mode == PAYMENT_MODE_QUARTERLY:
+        return False
+
+    while True:
+        answer = input("Mensualisez-vous vos charges ? [o/n] : ").strip().casefold()
+        if answer in {"o", "oui", "y", "yes"}:
+            return True
+        if answer in {"n", "non", "no"}:
+            return False
+        print("Répondez par « o » pour oui ou « n » pour non.")
 
 
 if __name__ == "__main__":

@@ -9,11 +9,13 @@
           "username": "Username",
           "password": "Password",
           "group": "Agency group",
+          "monthly_payments": "I pay my charges monthly",
           "update_interval_days": "Polling interval"
         },
         "data_description": {
           "group": "For example, use `agency` for a login URL ending in `connexion.php?groupe=agency`.",
-          "update_interval_days": "ICS is contacted once every two or three days."
+          "update_interval_days": "ICS is contacted once every two or three days.",
+          "monthly_payments": "Enable this to divide the current quarterly charge call into three monthly payments."
         }
       },
       "reconfigure": {
@@ -21,6 +23,7 @@
         "description": "Change the agency group or polling interval. The group will be validated with ICS before saving.",
         "data": {
           "group": "Agency group",
+          "monthly_payments": "I pay my charges monthly",
           "update_interval_days": "Polling interval"
         }
       },
@@ -60,7 +63,7 @@
         "name": "Balance due"
       },
       "monthly_recommendation": {
-        "name": "Recommended monthly payment"
+        "name": "Recommended payment"
       },
       "last_operation": {
         "name": "Last account operation"
