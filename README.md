@@ -125,18 +125,25 @@ Pushing a semantic-version tag such as `v0.5.0` automatically creates the
 matching GitHub release. Its notes list the commits between the new tag and the
 previous tag and link to the complete GitHub comparison. Keep the version in
 `custom_components/ics_extranet/manifest.json` and the client user-agent aligned
-with the tag.
+with the tag. The complete CI quality gate must pass before the release job can
+run.
 
 ```bash
 git tag v0.5.0
 git push origin v0.5.0
 ```
 
+The same automated checks run on every push to `main` and on every pull request
+targeting `main`. They run pytest against Python 3.14.6 and Home Assistant
+2026.7.4, verify that every integration module imports, run Ruff lint and format
+checks, compile the Python sources, and validate the JSON and brand assets. A tag
+is rejected if its version does not exactly match the integration manifest.
+
 Run formatting and lint checks:
 
 ```bash
-ruff format --check .
-ruff check .
+ruff check custom_components tests ics_poc.py
+ruff format --check custom_components tests ics_poc.py
 ```
 
 The repository layout already follows the HACS requirement of one integration

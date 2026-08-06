@@ -59,7 +59,7 @@ Before presenting a change as complete, run:
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 -m compileall -q custom_components ics_poc.py
+python3 -m compileall -q custom_components tests ics_poc.py
 python3 -m json.tool custom_components/ics_extranet/manifest.json >/dev/null
 git diff --check
 ```
@@ -68,12 +68,24 @@ Also validate every changed translation JSON file. Run Ruff checks when Ruff is
 available. Add or update tests for changed parsing, payment, configuration,
 translation, CLI, and version behavior.
 
+`.github/workflows/ci.yml` must run these checks on pushes to `main` and on
+pull requests targeting `main`. CI must pin the supported Python and Home
+Assistant versions, run the full suite with the real Home Assistant dependency,
+run Ruff lint and format checks, compile all Python sources including tests, and
+validate JSON assets. Tests must also verify these workflow contracts. The
+release workflow must apply the same quality gate and keep its test job as a
+dependency of the release job so a failing tag cannot publish a release. It must
+also reject a release tag whose semantic version does not match the integration
+manifest version.
+
 ## Versions and releases
 
 - Use semantic versions and keep the same version in:
   - `custom_components/ics_extranet/manifest.json`
   - `custom_components/ics_extranet/client.py` (`USER_AGENT`)
-  - `ics_poc.py` (`USER_AGENT`)
+- `ics_poc.py` is a standalone development tool and is not loaded or installed by
+  Home Assistant. CLI-only changes must not bump the integration version or
+  trigger a HACS release.
 - A normal push to `main` must not create a release.
 - Releases are triggered only by pushing a semantic-version tag such as `v0.6.0`.
 - `.github/workflows/release.yml` creates the matching GitHub Release, lists the
