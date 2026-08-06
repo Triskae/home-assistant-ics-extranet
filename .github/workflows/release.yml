@@ -5,16 +5,79 @@ on:
     tags:
       - "v*.*.*"
 
-permissions:
-  contents: write
+env:
+  HOME_ASSISTANT_VERSION: "2026.7.4"
+  PYTHON_VERSION: "3.14.6"
 
 jobs:
-  release:
+  tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Run tests with Home Assistant
+        run: >-
+          uv run --no-project
+          --with "pytest==9.1.1"
+          --with "homeassistant==$HOME_ASSISTANT_VERSION"
+          python -m pytest -q
+
+      - name: Lint Python sources
+        run: >-
+          uvx --from "ruff==0.16.1"
+          ruff check custom_components tests ics_poc.py
+
+      - name: Check Python formatting
+        run: >-
+          uvx --from "ruff==0.16.1"
+          ruff format --check custom_components tests ics_poc.py
+
+      - name: Compile Python sources
+        run: python3 -m compileall -q custom_components tests ics_poc.py
+
+      - name: Validate integration files
+        shell: bash
+        run: |
+          for file in \
+            custom_components/ics_extranet/manifest.json \
+            custom_components/ics_extranet/strings.json \
+            custom_components/ics_extranet/translations/*.json
+          do
+            python3 -m json.tool "$file" >/dev/null
+          done
+          test -s custom_components/ics_extranet/brand/icon.png
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag_version="${GITHUB_REF_NAME#v}"
+          manifest_version=$(python3 -c 'import json; print(json.load(open("custom_components/ics_extranet/manifest.json"))["version"])')
+          test "$tag_version" = "$manifest_version"
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Check out repository history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 

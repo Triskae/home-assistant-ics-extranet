@@ -759,9 +759,7 @@ def _normalize_group_input(value: str) -> str:
     if groups and groups[0].strip():
         candidate = groups[0]
     elif parsed.scheme or parsed.netloc:
-        raise IcsError(
-            "L’adresse fournie ne contient pas de valeur après « groupe= »."
-        )
+        raise IcsError("L’adresse fournie ne contient pas de valeur après « groupe= ».")
     return candidate.strip().lower()
 
 

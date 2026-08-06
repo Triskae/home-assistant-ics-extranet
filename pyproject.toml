@@ -5,5 +5,8 @@ line-length = 88
 [tool.ruff.lint]
 select = ["A", "ASYNC", "B", "C4", "E", "F", "I", "ICN", "PIE", "RUF", "SIM", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+"ics_poc.py" = ["RUF001"] # French typographic apostrophes are intentional.
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
