@@ -26,17 +26,28 @@ Source code and issue tracker: [Triskae/home-assistant-ics-extranet](https://git
 - English and French translations.
 - Local ICS brand icon for Home Assistant and HACS.
 
-## Installation for local testing
+## Installation
+
+### Via HACS (recommended)
+
+[![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Triskae&repository=home-assistant-ics-extranet&category=integration)
+
+### Manual installation / local testing
 
 1. Copy `custom_components/ics_extranet` into the Home Assistant
    `/config/custom_components/` directory.
 2. Restart Home Assistant.
-3. Open **Settings → Devices & services → Add integration**.
-4. Search for **ICS Extranet**.
-5. Enter the ICS username, password and agency group.
-6. Choose whether ICS should be checked every two or three days. Two days is
+
+## Configuration
+
+[![Open your Home Assistant instance and add the integration](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ics_extranet)
+
+1. Open **Settings → Devices & services → Add integration**.
+2. Search for **ICS Extranet**.
+3. Enter the ICS username, password and agency group.
+4. Choose whether ICS should be checked every two or three days. Two days is
    the default and fastest supported interval.
-7. Indicate whether the quarterly charges are paid in three monthly
+5. Indicate whether the quarterly charges are paid in three monthly
    instalments.
 
 The agency group is the value after `groupe=` in the public login URL. For
